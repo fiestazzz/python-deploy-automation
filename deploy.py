@@ -4,13 +4,11 @@ from datetime import datetime
 
 
 def deploy():
-    # moved_folder_path = moveFolderToReleases()
-
     todaysReleaseFolderPath = createTodaysReleaseFolder()
     bkp_folder_path = createBkpFolder(todaysReleaseFolderPath)
-    bkp_folder_path = createFoldersForBkpFolder(bkp_folder_path)
+    bkp_folders_path = createFoldersForBkpFolder(bkp_folder_path)
     release_folder_path = createReleaseFolder(todaysReleaseFolderPath)
-    moveReleaseToNewlyCreatedFolder(release_folder_path)
+    release_folders_path = moveReleaseToNewlyCreatedFolder(release_folder_path)
 
 
 def createFolderNameWithDate():
