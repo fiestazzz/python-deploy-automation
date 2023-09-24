@@ -34,8 +34,45 @@ def getFormattedDate():
 def createTodaysReleaseFolder():
     destination_folder_path = r'C:\Users\papab\Documents\Rilasci'
     release_folder_name_path = destination_folder_path + createFolderNameWithDate()
+    folder_name = createFolderNameWithDate()
+
+    # Check if the folder already exists
+    if os.path.exists(release_folder_name_path):
+        maxIndexFound = findAllExistingDeployFoldersWithTodaysDateAndReturnMax(
+            destination_folder_path, folder_name)
+
+        i = 1 if maxIndexFound is None else maxIndexFound + 1
+        while True:
+            new_folder_name = f"{folder_name}_{i}"
+            if not os.path.exists(os.path.join(destination_folder_path, new_folder_name)):
+                release_folder_name_path = destination_folder_path + new_folder_name
+                break
+            i += 1
+
     os.mkdir(release_folder_name_path)
     return release_folder_name_path
+
+
+def findAllExistingDeployFoldersWithTodaysDateAndReturnMax(sourcePath, folderName):
+    # Find all folders in the source path, where all releases are
+    folder_in_path = os.listdir(sourcePath)
+
+    # Remove the first character, remove'/'
+    stripped_folder_name = folderName[1:]
+
+    # Filter the results to only include directories that start with the specified prefix
+    matching_folders = [item for item in folder_in_path if os.path.isdir(
+        os.path.join(sourcePath, item)) and item.startswith(stripped_folder_name)]
+
+    # Find the folder with the largest value
+    largest_folder = max(matching_folders, key=lambda x: int(
+        x.split("_")[-1]) if "_" in x else 0, default="")
+
+    # Extract the numeric part from the folder name
+    numeric_part = largest_folder.split(
+        "_")[-1] if "_" in largest_folder else None
+
+    return int(numeric_part)
 
 
 def createBkpFolder(path):
@@ -66,13 +103,20 @@ def moveReleaseToNewlyCreatedFolder(destinationFolderPath):
         desktopPath = os.path.expanduser("~/Desktop")
         folder_to_copy = "/rel"
         source_folder = desktopPath + folder_to_copy
-        fe_path = moveFE(source_folder, destinationFolderPath)
-        be_path = moveBE(source_folder, destinationFolderPath)
-        props_path = movePROPS(source_folder, destinationFolderPath)
-        paths = {"RELEASE_FE_FOLDER_PATH": fe_path,
-                 "RELEASE_BE_FOLDER_PATH": be_path, "RELEASE_PROPS_FOLDER_PATH": props_path}
-        os.rmdir(source_folder)
-        return paths
+        if os.path.exists(source_folder):
+            fe_path = moveFE(source_folder, destinationFolderPath)
+            be_path = moveBE(source_folder, destinationFolderPath)
+            props_path = movePROPS(source_folder, destinationFolderPath)
+            paths = {"RELEASE_FE_FOLDER_PATH": fe_path,
+                     "RELEASE_BE_FOLDER_PATH": be_path, "RELEASE_PROPS_FOLDER_PATH": props_path}
+            os.rmdir(source_folder)
+            return paths
+        else:
+            print("Could not initiate deploy, there is no folder on desktop, path:{}".format(
+                source_folder))
+            stripped_directory_path = destinationFolderPath.rstrip("/release")
+            shutil.rmtree(stripped_directory_path)
+
     except shutil.Error:
         print("A folder with the same name already exists")
         return
@@ -84,7 +128,7 @@ def moveFE(sourceFolder, destinationPath):
         movedFolderPath = shutil.move(folderToMovePath, destinationPath)
         return movedFolderPath
     except FileNotFoundError:
-        print("Error while trying to move FE folder, reason: folder not found")
+        print("Could not move FE folder, reason: folder not found")
 
 
 def moveBE(sourceFolder, destinationPath):
@@ -93,7 +137,7 @@ def moveBE(sourceFolder, destinationPath):
         movedFolderPath = shutil.move(folderToMovePath, destinationPath)
         return movedFolderPath
     except FileNotFoundError:
-        print("Error while trying to move BE folder, reason: folder not found")
+        print("Could not move BE folder, reason: folder not found")
 
 
 def movePROPS(sourceFolder, destinationPath):
@@ -102,7 +146,7 @@ def movePROPS(sourceFolder, destinationPath):
         movedFolderPath = shutil.move(folderToMovePath, destinationPath)
         return movedFolderPath
     except FileNotFoundError:
-        print("Error while trying to move PROPS folder, reason: folder not found")
+        print("Could not move PROPS folder, reason: folder not found")
 
 
 deploy()
