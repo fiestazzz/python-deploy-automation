@@ -1,14 +1,27 @@
 import os
+import sys
 import shutil
 from datetime import datetime
 
 
 def deploy():
     todaysReleaseFolderPath = createTodaysReleaseFolder()
-    bkp_folder_path = createBkpFolder(todaysReleaseFolderPath)
-    bkp_folders_path = createFoldersForBkpFolder(bkp_folder_path)
+    # Creation of the release folder and sub folders : FE, BE, PROPS
     release_folder_path = createReleaseFolder(todaysReleaseFolderPath)
+    bkp_folder_path = createBkpFolder(todaysReleaseFolderPath)
     release_folders_path = moveReleaseToNewlyCreatedFolder(release_folder_path)
+
+    # Creation of the backup folder and sub folders : FE, BE, PROPS. Creates only the folders required according to deploy
+    bkp_folders_path = createFoldersForBkpFolder(
+        bkp_folder_path, release_folders_path)
+    print(bkp_folders_path)
+
+    # backup files
+    deploy_paths = backupAppsDeployedAccordingToWhatIsBeingDeployed(
+        bkp_folders_path)
+
+    # Actual deploy
+    deployFiles(release_folders_path, deploy_paths)
 
 
 def createFolderNameWithDate():
@@ -70,7 +83,7 @@ def findAllExistingDeployFoldersWithTodaysDateAndReturnMax(sourcePath, folderNam
     numeric_part = largest_folder.split(
         "_")[-1] if "_" in largest_folder else None
 
-    return int(numeric_part)
+    return int(numeric_part) if numeric_part is not None else numeric_part
 
 
 def createBkpFolder(path):
@@ -80,13 +93,22 @@ def createBkpFolder(path):
     return bkp_folder_path_name
 
 
-def createFoldersForBkpFolder(bkpFolderPath):
-    bkp_FE_folder_path = os.mkdir(bkpFolderPath + "/FE")
-    bkp_BE_folder_path = os.mkdir(bkpFolderPath + "/BE")
-    bkp_PROPS_folder_path = os.mkdir(bkpFolderPath + "/PROPS")
-    paths = {"BKP_FE_FOLDER_PATH": bkp_FE_folder_path,
-             "BKP_BE_FOLDER_PATH": bkp_BE_folder_path, "BKP_PROPS_FOLDER_PATH": bkp_PROPS_folder_path}
-    return paths
+def createFoldersForBkpFolder(bkpFolderPath, releaseFolderPaths):
+
+    bpk_folders_path = {}
+    if releaseFolderPaths.get('RELEASE_FE_FOLDER_PATH') is not None:
+        os.mkdir(bkpFolderPath + "/FE")
+        bpk_folders_path['BKP_FE_FOLDER_PATH'] = bkpFolderPath + "/FE"
+
+    if releaseFolderPaths.get('RELEASE_BE_FOLDER_PATH') is not None:
+        os.mkdir(bkpFolderPath + "/BE")
+        bpk_folders_path['BKP_BE_FOLDER_PATH'] = bkpFolderPath + "/BE"
+
+    if releaseFolderPaths.get('RELEASE_PROPS_FOLDER_PATH') is not None:
+        os.mkdir(bkpFolderPath + "/PROPS")
+        bpk_folders_path['BKP_PROPS_FOLDER_PATH'] = bkpFolderPath + "/PROPS"
+
+    return bpk_folders_path
 
 
 def createReleaseFolder(path):
@@ -101,19 +123,31 @@ def moveReleaseToNewlyCreatedFolder(destinationFolderPath):
         desktopPath = os.path.expanduser("~/Desktop")
         folder_to_copy = "/rel"
         source_folder = desktopPath + folder_to_copy
+        paths = {}
         if os.path.exists(source_folder):
-            fe_path = moveFE(source_folder, destinationFolderPath)
-            be_path = moveBE(source_folder, destinationFolderPath)
-            props_path = movePROPS(source_folder, destinationFolderPath)
-            paths = {"RELEASE_FE_FOLDER_PATH": fe_path,
-                     "RELEASE_BE_FOLDER_PATH": be_path, "RELEASE_PROPS_FOLDER_PATH": props_path}
+            if (os.path.exists(source_folder + "/FE")):
+                fe_path = moveFE(source_folder, destinationFolderPath)
+                paths['RELEASE_FE_FOLDER_PATH'] = fe_path
+
+            if (os.path.exists(source_folder + "/BE")):
+                be_path = moveBE(source_folder, destinationFolderPath)
+                paths['RELEASE_BE_FOLDER_PATH'] = be_path
+
+            if (os.path.exists(source_folder + "/PROPS")):
+                props_path = movePROPS(source_folder, destinationFolderPath)
+                paths['RELEASE_PROPS_FOLDER_PATH'] = props_path
+
             os.rmdir(source_folder)
             return paths
         else:
             print("Could not initiate deploy, there is no folder on desktop, path:{}".format(
                 source_folder))
+
+            # Remove created folders if no rel folder is found on desktop
             stripped_directory_path = destinationFolderPath.rstrip("/release")
             shutil.rmtree(stripped_directory_path)
+            # Stops the program completely
+            sys.exit()
 
     except shutil.Error:
         print("A folder with the same name already exists")
@@ -145,6 +179,43 @@ def movePROPS(sourceFolder, destinationPath):
         return movedFolderPath
     except FileNotFoundError:
         print("Could not move PROPS folder, reason: folder not found")
+
+
+def backupAppsDeployedAccordingToWhatIsBeingDeployed(bkpFoldersPath):
+    # FE
+    deployPaths = {"FE_DEPLOY_PATH": r'C:\Users\papab\Documents\testCopy'}
+    if bkpFoldersPath.get('BKP_FE_FOLDER_PATH') is not None:
+        source_folder_path = r'C:\Users\papab\Documents\testCopy'
+        move_action = "MOVE"
+        copyOrMoveFilesToDestination(
+            source_folder_path, bkpFoldersPath.get('BKP_FE_FOLDER_PATH'), move_action)
+
+    return deployPaths
+
+
+def deployFiles(releaseFoldersPath, deployPaths):
+    if releaseFoldersPath.get('RELEASE_FE_FOLDER_PATH') is not None:
+        source_folder_path = releaseFoldersPath.get('RELEASE_FE_FOLDER_PATH')
+        copy_action = "COPY"
+        copyOrMoveFilesToDestination(
+            source_folder_path, deployPaths.get('FE_DEPLOY_PATH'), copy_action)
+
+
+def copyOrMoveFilesToDestination(sourcePath, destinationPath, action):
+    # Get a list of all files in the source folder
+    files = os.listdir(sourcePath)
+    # Copy each file from the source folder to the destination folder
+    for file in files:
+        source_file_path = os.path.join(sourcePath, file)
+        print(source_file_path)
+        destination_file_path = os.path.join(destinationPath, file)
+        print(destination_file_path)
+        if action == "COPY":
+            shutil.copy2(source_file_path, destination_file_path)
+            print(f"Moving '{file}' to '{destinationPath}'")
+        else:
+            shutil.move(source_file_path, destination_file_path)
+            print(f"Copying '{file}' to '{destinationPath}'")
 
 
 deploy()
